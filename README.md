@@ -1,0 +1,1 @@
+The task offers to get data from analytics dashboards and insert in to a database.
