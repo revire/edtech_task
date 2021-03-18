@@ -130,4 +130,4 @@ dmypy.json
 
 
 #Configs
-db_config.py
+tracking/db_config.py

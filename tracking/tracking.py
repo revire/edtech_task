@@ -25,7 +25,6 @@ import csv
 import logging
 import psycopg2
 import requests
-import re
 import datetime
 
 import db_config
@@ -41,14 +40,24 @@ HOST= db_config.HOST
 def get_data(url):
     logging.info('Collecting dataset from dashboard')
     data = requests.get(url)
+    try:
+        if data.status_code == 200:
 
-    data_split = list(csv.reader(data.content.decode().splitlines(), delimiter=','))
-    agg_report = []
-    for row in data_split:
-        if row not in agg_report:
-            agg_report.append(row)
-    logging.info('The dataset is ready')
-    return agg_report
+            print(data)
+            data_split = list(csv.reader(data.content.decode().splitlines(), delimiter=','))
+            agg_report = []
+            for row in data_split:
+                if row not in agg_report:
+                    agg_report.append(row)
+            logging.info('The dataset is ready')
+            return agg_report
+        elif data.status_code != 200:
+            logging.warning(f'Status code {data.status_code} while requesting')
+
+    except Exception:
+        logging.warning('Exception while requesting URL')
+
+
 
 
 def singleton(cls):
@@ -68,57 +77,57 @@ class DBHandler:
         self.database = dbname
         self.client = psycopg2.connect(dbname=dbname, user=user, password=password, host=host)
         self.cur = self.client.cursor()
-        logging.info(f'Collected to {dbname}')
+        logging.info(f'Connected to {dbname}')
 
-    @classmethod
+    # @classmethod
     def close(self):
         self.client.close()
         self.cur.close()
         logging.info(f'Connection to {self.database} is closed')
 
-    @classmethod
+    # @classmethod
     def create_base(self):
         try:
             self.client.set_isolation_level(0)
             self.cur.execute(f'create database {self.database}')
         except psycopg2.errors.DuplicateDatabase:
-            logging.warn('Database already exists')
+            logging.warning('Database already exists')
 
 def create_table(con, cur):
     cur.execute('''
         create table if not exists campaign_report (
-        attributed_touch_time timestamp,
-        install_time timestamp,
+        attributed_touch_time text,
+        install_time text,
         media_source text,
         campaign text,
         customer_user_id text,
-        appsflyer_id text,
-        constraint user_attribute unique (customer_user_id, attributed_touch_time) 
+        appsflyer_id text
         )
     ''')
     con.commit()
     logging.info('Table campaign_report is created')
 
 
-def insert_table(con, cur):
-    cur.execute('''
-            insert into campaign_report ( 
-                attributed_touch_time,
-                install_time,
-                media_source,
-                campaign,
-                customer_user_id,
-                appsflyer_id
-            ) values (
-                nullif('%s', '')::timestamp,
-                nullif('%s', '')::timestamp,
-                nullif('%s', ''),
-                nullif('%s', ''),
-                nullif('%s', ''),
-                nullif('%s', '')
-            )
-            on conflict do nothing 
-        ''')
+def insert_table(con, cur, agg_report):
+    for row in agg_report[1:]:
+        cur.execute('''
+                insert into campaign_report ( 
+                    attributed_touch_time,
+                    install_time,
+                    media_source,
+                    campaign,
+                    customer_user_id,
+                    appsflyer_id
+                ) values (
+                    nullif(%s, ''),
+                    nullif(%s, ''),
+                    nullif(%s, ''),
+                    nullif(%s, ''),
+                    nullif(%s, ''),
+                    nullif(%s, '')
+                )
+                on conflict do nothing 
+            ''', row)
     con.commit()
     logging.info('Data is inserted')
 
@@ -138,12 +147,20 @@ if __name__ == '__main__':
     to_time = datetime.date(2021, 3, 3)
     url = f'https://hq.appsflyer.com/export/com.igg.android.mobileroyale/installs_report/v5?api_token={token}&from={from_time}&to={to_time}&fields={fields}'
 
-    agg_report = get_data(url)
+    # agg_report = get_data(url)
+    with open('sample_report.csv', 'r') as f:
+        agg_report = f.readlines()
+        agg_report = [line.strip().split(',') for line in agg_report]
+        print(agg_report)
+        print('got agg report by csv')
+
     db_connection = DBHandler(DBNAME, USER, PASSWORD, HOST)
+
+    # print(db_connection.__dict__)
     db_connection.create_base()
     con = db_connection.client
     cur = db_connection.cur
     create_table(con, cur)
-    insert_table(con, cur)
+    insert_table(con, cur, agg_report)
 
 
