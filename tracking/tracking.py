@@ -79,19 +79,20 @@ class DBHandler:
         self.cur = self.client.cursor()
         logging.info(f'Connected to {dbname}')
 
-    # @classmethod
+
     def close(self):
         self.client.close()
         self.cur.close()
         logging.info(f'Connection to {self.database} is closed')
 
-    # @classmethod
+
     def create_base(self):
         try:
             self.client.set_isolation_level(0)
             self.cur.execute(f'create database {self.database}')
         except psycopg2.errors.DuplicateDatabase:
             logging.warning('Database already exists')
+
 
 def create_table(con, cur):
     cur.execute('''
@@ -143,8 +144,10 @@ if __name__ == '__main__':
         'customer_user_id',
         'appsflyer_id',
     ])
-    from_time = datetime.date(2021, 3, 3)
-    to_time = datetime.date(2021, 3, 3)
+
+    from_time = datetime.date.today() - datetime.timedelta(days=1)
+    to_time = from_time - datetime.timedelta(days=60)
+
     url = f'https://hq.appsflyer.com/export/com.igg.android.mobileroyale/installs_report/v5?api_token={token}&from={from_time}&to={to_time}&fields={fields}'
 
     # agg_report = get_data(url)
@@ -156,7 +159,6 @@ if __name__ == '__main__':
 
     db_connection = DBHandler(DBNAME, USER, PASSWORD, HOST)
 
-    # print(db_connection.__dict__)
     db_connection.create_base()
     con = db_connection.client
     cur = db_connection.cur
